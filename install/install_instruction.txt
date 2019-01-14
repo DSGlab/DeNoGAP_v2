@@ -1,0 +1,38 @@
+#### This is the install instruction file for setting up DeNoGAP2 ####
+
+#### Perquisites required ####
+
+- Installation of DeNoGAP2 pipeline and programs used within it requires Miniconda2 & Python2.7 to be installed on the system.
+
+- Download & install Minicona2 for Python2.7 on your system from here https://conda.io/miniconda.html
+
+- Miniconda installer for Mac users: https://repo.continuum.io/miniconda/Miniconda2-latest-MacOSX-x86_64.sh
+
+- Miniconda installer for Linux users: https://repo.continuum.io/miniconda/Miniconda2-latest-Linux-x86_64.sh
+
+- Run following commands to install miniconda2:
+
+mkdir miniconda2
+cd miniconda2
+wget https://repo.continuum.io/miniconda/Miniconda2-latest-<OS>.sh
+sh Miniconda2-latest-<OS>.sh
+
+### Instructions to setup & install DeNoGAP2 ####
+
+- Create a conda environment for DeNOGAP2
+
+conda create --name denogap2
+
+- Add channels for installing required programs & packages
+
+conda config --add channels defaults
+conda config --add channels conda-forge
+conda config --add channels bioconda
+
+- Install required programs and supporting packages in DeNoGAP2 conda environment
+
+conda install --name denogap2 biopython blast hmmer mcl python-igraph sqlite mafft
+
+   
+
+
