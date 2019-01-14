@@ -54,7 +54,7 @@ def main():
 				"hitcov_cutoff":c_args["hitcoverage"],
 				"chicov_cutoff":c_args["chimcoverage"]}
 	
-	iteration=None                                  #### iteration number
+	iteration=0                                      #### iteration number
 	resume_iteration=None                            #### resume iteration from this number
 	iter_dir=None                                   #### path for current iteration directory
 	project_dir=None                                #### path for project directory 
@@ -63,11 +63,8 @@ def main():
 	current_timestamp=now.strftime("%Y%m%d_%H%M%S") ### current timestamp 
 		
 		
-	if c_args["resume_iter"]==None:
-		iteration=0
-	else:
-		resume_iteration=c_args['resume_iter']
-		iteration=resume_iteration+1	
+	if c_args["resume_iter"]!=None:
+		resume_iteration=int(c_args['resume_iter'])
 		
 	### create project_dir paths ###
 	project_dir=os.path.join(output_dir,project_name)
@@ -256,7 +253,26 @@ def main():
 		read cluster file from iteration to resume from
 		build hmm models/ sequence database
 		scan hmm models/ sequence database iteratively against each genome
-		"""	
+		"""
+		
+		while len(list_other_genome)!=0:
+		
+			iteration=int(resume_iteration)+1
+			outdir_dict=SetDir().mk_hmm_iter_dirs(project_dir,iteration)
+			
+			model_cluster_dir=os.path.join(outdir_dict["BASE"],
+										   "iter_{0}".format(resume_iteration),"CLUSTER")
+										   
+			model_cluster_file=[os.path.join(model_cluster_dir,file_name) 
+			                     for file_name in os.listdir(model_cluster_dir)
+			                        if file_name.startswith("Hmmcluster")]
+			
+			print model_cluster_file						   
+			
+										   
+
+			
+			
 		
 		
 				
@@ -297,7 +313,7 @@ def parse_args(desc):
 	mandatoryArguments.add_argument("--output_dir", metavar="<DIR PATH>", 
 									help="specify path to the output directory", 
 									required=True)
-	mandatoryArguments.add_argument("--resume_iter",metavar="<INT>",
+	mandatoryArguments.add_argument("--resume_iter",metavar="<INT>",type=int,
 									help="specify last iteration number from which "\
 										"analysis should be resumed") 
 	
