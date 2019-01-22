@@ -1,1 +1,3 @@
-Follow instruction given in https://github.com/thakurshalabh08/DeNoGAP_v2/wiki
+Follow instruction here
+
+https://github.com/thakurshalabh08/DeNoGAP_v2/wiki
