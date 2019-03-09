@@ -11,11 +11,12 @@ import shutil
 import logging
 import datetime
 import subprocess
-from collections import defaultdict
-from argparse import RawTextHelpFormatter
 from Bio import SeqIO
 from Bio import SearchIO
-from classes.denogap_utils.utilities import SequenceFileUtilities
+from collections import defaultdict
+from argparse import RawTextHelpFormatter
+from pathos.multiprocessing import ProcessPool
+from classes.denogap_utils.utilities import SequenceFileUtilities as su
 from classes.denogap_utils.hmmer import Hmmer
 from classes.denogap_utils.dirsetup import SetDir
 from classes.denogap_utils.multihsp import FixMultiHSP
@@ -54,12 +55,12 @@ def main():
 				"hitcov_cutoff":c_args["hitcoverage"],
 				"chicov_cutoff":c_args["chimcoverage"]}
 	
-	iteration=0                                      #### iteration number
-	resume_iteration=None                            #### resume iteration from this number
+	iteration=0                                     #### iteration number
+	resume_iteration=None                           #### resume iteration from this number
 	iter_dir=None                                   #### path for current iteration directory
 	project_dir=None                                #### path for project directory 
-	outdir_dir=defaultdict(dict)                    #### dict of output dir
-	denogap_seq=SequenceFileUtilities()             #### SequenceUtility Class object
+	projectdir_dict=defaultdict()                   #### dict of project dir output
+	iterdir_dict=defaultdict()                      #### dict of iter dir output
 	current_timestamp=now.strftime("%Y%m%d_%H%M%S") ### current timestamp 
 		
 		
@@ -76,7 +77,6 @@ def main():
 
 	#### create log file for the project ####
 	logging.basicConfig(filename=log_file,format="[%(asctime)s] %(levelname)-8s %(message)s",datefmt='%a, %d %b %Y %H:%M:%S',level=logging.INFO)
-	
 	logging.info("This is a run-log for DeNoGAP2 pipeline executed on {}\n".format(current_timestamp))
 	#logging.info("[Command executed] {}".format(command))
 
@@ -97,26 +97,36 @@ def main():
 	logging.info("Reading fasta file names from the sequence directory {}".format(seq_dir))
 	print "[{}]: Reading fasta file names from the sequence directory {}\n".format(now.strftime("%Y:%m:%d_%H:%M:%S"),seq_dir)
 	
-	fasta_dict=denogap_seq.get_file_name_from_dir(seq_dir)
+	fasta_dict=su().get_file_name_from_dir(seq_dir)
+	fasta_list=fasta_dict.values()
 	
 	#### check if protein sequences for all genome names specified in information file are present in the data directory ####
 	for genome_name in genome_dict:
 		if not genome_name in fasta_dict:
 			logging.error("ERROR, Protein sequence fasta file for {} not found in {}\n".format(genome_name,data_dir))
 			print "[{}]: ERROR, Protein sequence fasta file for {} not found in {}\n".format(now.strftime("%Y:%m:%d_%H:%M:%S"),genome_name,data_dir)
-			sys.exit()
+			sys.exit()	
 	
 	#### If not already present set-up project directory #####
-	logging.info("Setting up project directory for DeNoGAP-HMM{}".format(project_dir))
+	logging.info("Setting up project directory for DeNoGAP-HMM {}".format(project_dir))
 	print "[{}]: Setting up project directory for DeNoGAP-HMM {}\n".format(now.strftime("%Y:%m:%d_%H:%M:%S"),project_dir)
 	
 	if not os.path.exists(project_dir):
 		logging.info("Creating new project dir {}\n".format(project_dir))
 		print "[{}]: Creating new project dir {}\n".format(now.strftime("%Y:%m:%d_%H:%M:%S"),project_dir)
 		os.makedirs(project_dir)
+		projectdir_dict=SetDir().mk_project_dirs(project_dir)
 	else:
 		logging.info("Using existing project dir {}\n".format(project_dir))
 		print "[{}]: Using existing project dir {}\n".format(now.strftime("%Y:%m:%d_%H:%M:%S"),project_dir)
+		projectdir_dict=SetDir().mk_project_dirs(project_dir)
+		
+	##### Create and load sequences into index database #####	
+	logging.info("Creating Sequence index database {}".format(os.path.join(project_dir,"Sequence_index.idx")))
+	print "[{}]: Creating Sequence index database {}\n".format(now.strftime("%Y:%m:%d_%H:%M:%S"),os.path.join(project_dir,"Sequence_index.idx"))
+	
+	fasta_seq_idx=SeqIO.index_db(os.path.join(projectdir_dict["TMP"],"Sequences_indexdb.idx"),
+								 fasta_list,"fasta")					 
 		
 	#### Initial homolog mapping for reference genomes
 	#### Starts with iteration 0
@@ -126,7 +136,7 @@ def main():
 	if resume_iteration==None:
 
 		### setup dir for the iteration ###
-		outdir_dict=SetDir().mk_hmm_iter_dirs(project_dir,iteration)
+		iterdir_dict=SetDir().mk_hmm_iter_dirs(project_dir,iteration)
 	
 		logging.info("Starting pairwise sequence comparision step\n")
 		print "[{}]: Starting pairwise sequence comparision step\n".format(now.strftime("%Y:%m:%d_%H:%M:%S"))
@@ -138,16 +148,17 @@ def main():
 		seqdb_dict=defaultdict(dict)
 		
 		for genome_name in list_ref_genome:
-			seq_dict=denogap_seq.mkfastadict(fasta_dict[genome_name])
+			seq_dict=SeqIO.index(fasta_dict[genome_name],'fasta')
 			seqdb_dict[genome_name]=seq_dict
+			seq_dict.close()
 				
-		seqdb_dir=outdir_dict["SEQ_DB"]
+		seqdb_dir=projectdir_dict["SEQ_DB"]
 		seqdb_file="DBSEQ.fasta"
 		
 		logging.info("Saved sequence database {} for pairwise comparision at {}\n".format(seqdb_file,seqdb_dir))
 		print "[{}]: Saved sequence database {} for pairwise comparision {}\n".format(now.strftime("%Y:%m:%d_%H:%M:%S"),seqdb_file,seqdb_dir)		
 				
-		seqdb_path=denogap_seq.write_seqfile(seqdb_dir,seqdb_file,seqdb_dict)
+		seqdb_path=su().write_seqfile(seqdb_dir,seqdb_file,seqdb_dict)
 		
 		#### Align query sequences against sequence database ####
 		
@@ -161,11 +172,11 @@ def main():
 				logging.info("QUERY: {}\n".format(genome_name))
 				print "[{}]: QUERY: {}\n".format(now.strftime("%Y:%m:%d_%H:%M:%S"),genome_name)
 					
-				outpath=os.path.join(outdir_dict["ALL_MATCH"],genome_name+".hmmalign.txt")
-				domtabpath=os.path.join(outdir_dict["ALL_MATCH"],genome_name+".domtab.txt")
-				bestmatchpath=os.path.join(outdir_dict["BEST_MATCH"],genome_name+".bhh.txt")
-				partialmatchpath=os.path.join(outdir_dict["PARTIAL_MATCH"],genome_name+".phh.txt")
-				chimeramatchpath=os.path.join(outdir_dict["CHIMERIC_MATCH"],genome_name+".chh.txt")                                                             
+				outpath=os.path.join(iterdir_dict["ALL_MATCH"],genome_name+".hmmalign.txt")
+				domtabpath=os.path.join(iterdir_dict["ALL_MATCH"],genome_name+".domtab.txt")
+				bestmatchpath=os.path.join(iterdir_dict["BEST_MATCH"],genome_name+".bhh.txt")
+				partialmatchpath=os.path.join(iterdir_dict["PARTIAL_MATCH"],genome_name+".phh.txt")
+				chimeramatchpath=os.path.join(iterdir_dict["CHIMERIC_MATCH"],genome_name+".chh.txt")                                                             
 					                        
 						
 				hmmer_proc_returncode,hmmerstderr=Hmmer("phmmer").run_hmmer(c_args,
@@ -215,10 +226,11 @@ def main():
 		logging.info("MCL Clustering Best-Hits\n")
 		print "[{}]: MCL Clustering Best-Hits\n".format(now.strftime("%Y:%m:%d_%H:%M:%S"))
 		
-		mcl_abc_file=os.path.join(outdir_dict["TMP"],"seq.abc")
+		mcl_abc_file=os.path.join(projectdir_dict["TMP"],"seq.abc")
 			                   	
-		os.system("cat {}/* | cut -f 1,2,11 > {}".format(outdir_dict["BEST_MATCH"],
-		                                                 mcl_abc_file))
+		os.system("cat {}/* | cut -f 1,2,11 | sed '1d' > {}".format(
+				iterdir_dict["BEST_MATCH"],mcl_abc_file))
+				
 		mcl_cluster=sc().mcl_clustering(mcl_abc_file,c_args["mcl_inflation"])
 		
 		logging.info("Adding Group-IDs\n")
@@ -226,7 +238,7 @@ def main():
 		
 		grouped_cluster=sc().add_cluster_ids(mcl_cluster,start_at=1000)
 		
-		hmm_cluster_file=os.path.join(outdir_dict['CLUSTER'],
+		hmm_cluster_file=os.path.join(iterdir_dict['CLUSTER'],
 		                              "Hmmcluster_"+now.strftime("%Y%m%d_%H%M%S")+".txt")
 		
 		logging.info("Saving Cluster file at {}\n".format(hmm_cluster_file))
@@ -258,28 +270,32 @@ def main():
 		while len(list_other_genome)!=0:
 		
 			iteration=int(resume_iteration)+1
-			outdir_dict=SetDir().mk_hmm_iter_dirs(project_dir,iteration)
+			iterdir_dict=SetDir().mk_hmm_iter_dirs(project_dir,iteration)
 			
-			model_cluster_dir=os.path.join(outdir_dict["BASE"],
+			### getting model cluster directory #####
+			model_cluster_dir=os.path.join(projectdir_dict["BASE"],
 										   "iter_{0}".format(resume_iteration),"CLUSTER")
-										   
+			
+			### getting model cluster file ####							   
 			model_cluster_file=[os.path.join(model_cluster_dir,file_name) 
 			                     for file_name in os.listdir(model_cluster_dir)
 			                        if file_name.startswith("Hmmcluster")]
 			
-			print model_cluster_file						   
+			### Call function to build hmm models and if singleton then add 
+			### to sequence database                        
+			#hdb().build_hmmdb(model_cluster_file[0],seq_dir,
+			#								outdir_dict["HMM_DB"],
+			#								outdir_dict["SEQ_DB"])
+			model_dir=os.path.join(projectdir_dict["HMMER_DB"],"HMM_MODELS")
+			os.makedirs(model_dir)
 			
-										   
-
+			with open(model_cluster_file[0],"r") as clustfile:
 			
-			
+				pool=ProcessPool(nodes=c_args["cpu"])
+				[pool.apply(build_hmm,args=(clustline,fasta_dict,model_dir))
+					     for clustline in clustfile]	     
+											                 
 		
-		
-				
-			  
-				  
-					  			  
-							 
 ##### FUNCTIONS #######
 def parse_args(desc):
 
@@ -430,12 +446,42 @@ def write_hmmer_result(genome_name,outfile,result_hmmer):
 
 			result_out.write(result_line)
 	
-	result_out.close()					
-					                    
-					            
+	result_out.close()
+
+
+def build_hmm(cluster_line,fasta_files,model_dir):
+	"""
+	This functions builds hmm model for each cluster
+	"""
+	# remove new-line character and split cluster line into columns
+	cluster_line=cluster_line.rstrip("\n")
+	cluster_column=cluster_line.split("\t")
+	cluster_id=cluster_column.pop(0)
+	cluster_id=cluster_id.rstrip("\:")
+	
+	print cluster_id
+	print mp.current_process()
+	
+	os.makedirs(os.path.join(model_dir,cluster_id))
+	msa_fasta_file=os.path.join(model_dir,cluster_id,cluster_id+".fasta")
+	
+	with open(msa_fasta_file,"w") as msa_fasta:
+		for seq_id in cluster_column:
+			split_seqid=seq_id.split("|")
+			genome_name=split_seqid.pop(0)
+			id="|".join(split_seqid)
+			seq_dict=su().getseq_forid(fasta_files[genome_name],id)
+			msa_fasta.write(">{}|{}\n{}\n".format(cluster_id,id,seq_dict[id]))
+	msa_fasta.close()
+	
+	#### build msa from multi gene msa_fasta ###
+	if len(cluster_column)>1:
+		msa_file=su().build_msa(msa_fasta_file,os.path.join(model_dir,cluster_id))
+		hmm_file=Hmmer("hmmbuild").run_hmmbuild(msa_file,model_dir)
+		
+	
 	
 
-	
 	
 	
 if __name__ == '__main__':

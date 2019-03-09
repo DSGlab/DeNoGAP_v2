@@ -64,7 +64,7 @@ class SequenceFileUtilities:
 		with open(os.path.join(dirpath,seqfile_name),"w") as seqfile:
 			for name,seq_dict in seqdb_dict.iteritems():
 				for seq_id in seq_dict:		
-					seqfile.write(">{}|{}\n{}\n".format(name,seq_dict[seq_id].id,seq_dict[seq_id].seq))
+					seqfile.write(">{}|{}\n{}\n".format(name,seq_id,seq_dict[seq_id]))
 	
 		seqfile.close()			
 			
