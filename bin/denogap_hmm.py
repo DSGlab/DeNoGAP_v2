@@ -289,6 +289,8 @@ def main():
 			model_dir=os.path.join(projectdir_dict["HMMER_DB"],"HMM_MODELS")
 			os.makedirs(model_dir)
 			
+			#### Run hmmbuild ####
+			
 			with open(model_cluster_file[0],"r") as clustfile:
 			
 				pool=ProcessPool(nodes=c_args["cpu"])
