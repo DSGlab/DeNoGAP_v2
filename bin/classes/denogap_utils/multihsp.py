@@ -3,6 +3,7 @@ from __future__ import division
 import os
 import sys
 import copy
+import pandas as pd
 from collections import defaultdict
 
 class FixMultiHSP:
@@ -13,30 +14,55 @@ class FixMultiHSP:
 	def __init__(self,program):
 		self.program=program
 		
-	def fix_hsps(self,result_dict,accuracy):
+	def fix_hsps(self,result_df,accuracy):
 		"""
 		This function iterates over hmmer result dict and prepares list
 		of hsps for each query-target pair to be given to module for computing
 		best hsps
 		"""
 		
-		fixed_hsp_dict=defaultdict(dict)
+		fixed_hit_df=pd.DataFrame()
 		
-		for query_id in result_dict:
-			for target_id in result_dict[query_id]:
+		column_header=list(result_df)
+		
+		grouped_hsps=result_df.groupby(['QUERY_ID','HMM_ID'])
+		
+		multi_hsp_df=grouped_hsps.filter(lambda x: len(x) > 1 and any(x["AVERAGE_ACCURACY"]>=accuracy))
+		single_hsp_df=grouped_hsps.filter(lambda x: len(x)==1 and any(x["AVERAGE_ACCURACY"]>=accuracy))
+		
+		
+		#single_hsp_fixed=single_hsp_df.apply(lambda x: self.convert_hsp2hit(x.to_frame().reset_index()))
+		
+		
+		multi_hsp_group=multi_hsp_df.groupby(['QUERY_ID','HMM_ID'])
+		
+		
+		#print(single_hsp_fixed)
+		
+		
+		
+		for name,hsp_group in multi_hsp_group:
+			
+			hsps=hsp_group[hsp_group.AVERAGE_ACCURACY>=accuracy].to_dict('records')
+			
+			compatible_df=pd.DataFrame()
+			
+			if len(hsps)>1:
+				compatible_hsps=self.compute_best_hsp(hsps,hsp_list=list())
+				compatible_df=pd.DataFrame(compatible_hsps)
+			elif len(hsps)==1:
+				compatible_df=pd.DataFrame(hsps)
+			else:
+				continue	
 				
-				hsps=[domain_line for domain_index,domain_line in result_dict[query_id][target_id].iteritems()
-					  if domain_line['AVERAGE_ACCURACY']>=accuracy]
+			hit_df=self.convert_hsp2hit(compatible_df)	
+			print(hit_df)
 				
-				if len(hsps)!=0:	
-					compatible_hsps=self.compute_best_hsp(hsps,hsp_list=list())
-					fixed_hsp_dict[query_id][target_id]=compatible_hsps
+			fixed_hit_df.append(hit_df,ignore_index=True)	
 		
-		hit_dict=self.convert_hsp2hit(fixed_hsp_dict)
+		return(fixed_hit_df)		
 		
-		#print hit_dict		
 		
-		return(hit_dict)		
 		
 	def compute_best_hsp(self,hsps,hsp_list=list()):
   		"""
@@ -48,31 +74,33 @@ class FixMultiHSP:
     	http://jeff.wintersinger.org/posts/2014/07/designing-an-algorithm-to-
     	compute-the-optimal-set-of-blast-hits/
   		"""
-		if len(hsps) == 0:
-			return hsp_list
-		if len(hsps) == 1:
-    		# Trivial solution: one HSP, so optimal solution is just itself.
-			hsp_list.append(hsps[0])
-			return hsp_list
+  		
+  		if len(hsps) == 0:
+  			return hsp_list
+  			
+  		if len(hsps) == 1:
+  			# Trivial solution: one HSP, so optimal solution is just itself.
+  			hsp_list.append(hsps[0])
+  			return hsp_list
 
   		# Last HSP
   		last_hsp = hsps[-1]
   		# All HSPs except last
   		previous = hsps[:-1]
-
-		# Find subset of HSPs in `previous` that don't overlap `last_hsp`.
-		compatible = self.find_compatible(last_hsp, previous)
-
-		without_list = copy.deepcopy(hsp_list)
-    		with_list = copy.deepcopy(hsp_list)
-    		with_list.append(last_hsp)
-
+  		
+  		# Find subset of HSPs in `previous` that don't overlap `last_hsp`.
+  		compatible = self.find_compatible(last_hsp, previous)
+  		
+  		without_list = copy.deepcopy(hsp_list)
+  		with_list = copy.deepcopy(hsp_list)
+  		with_list.append(last_hsp)
+  		
   		best_without_last = self.compute_best_hsp(previous,without_list)
-		best_with_last    = self.compute_best_hsp(compatible, with_list)
-
-		compatible_hsp=max([best_without_last, best_with_last],key=lambda (x): sum([float(y['BITSCORE']) for y in x]))
-		
-		return(compatible_hsp)
+  		best_with_last    = self.compute_best_hsp(compatible, with_list)
+  		
+  		compatible_hsp=max([best_without_last, best_with_last],key=lambda x: sum([float(y['DOM_BITSCORE']) for y in x]))
+  		
+  		return(compatible_hsp)
 		
 		
 	def find_compatible(self,target, hsps):
@@ -91,62 +119,43 @@ class FixMultiHSP:
   				first, second = hsp, target
   			
   			overlap = (second['QUERY_START'] <= first['QUERY_END'] or second['HMM_START'] <= first['HMM_END'])
-    			   
-    		if not overlap:
-    			compatible.append(hsp)
-    		
-		return(compatible)
+  			
+  			if not overlap:
+  				compatible.append(hsp)
+  				
+  		return(compatible)
 
 
-	def convert_hsp2hit(self,fixed_hsp_dict):
+	def convert_hsp2hit(self,compatible_df):
 		"""
 		This function converts list of hsp into hit
 		"""
+		
+		hit_df=compatible_df
+		
+		query_len=compatible_df["QUERY_LEN"].max()
+		hmm_len=compatible_df["HMM_LEN"].max()
+		
+		total_dom_bitscore=compatible_df["DOM_BITSCORE"].sum()
+		total_num_ident=compatible_df["IDENTICAL_COUNT"].sum()
+		total_num_sim=compatible_df["SIMILAR_COUNT"].sum()
+		total_query_aln=(compatible_df["QUERY_END"] - compatible_df["QUERY_START"]).sum()
+		total_hmm_aln=(compatible_df["HMM_END"] - compatible_df["HMM_START"]).sum()
+		
+		hit_df["TOTAL_PERCENT_IDENTITY"]=round(float(int(total_num_ident)/int(min(total_query_aln,total_hmm_aln)))*100,2)
+			
+		hit_df["TOTAL_PERCENT_SIMILARITY"]=round(float(int(total_num_sim)/int(min(total_query_aln,total_hmm_aln)))*100,2)
+		
+		hit_df["TOTAL_QUERY_COVERAGE"]=round(float(int(total_query_aln) / int(query_len))*100,2)
+			
+		hit_df["TOTAL_HMM_COVERAGE"]=round(float(int(total_hmm_aln) / int(hmm_len))*100,2)
+		
+		hit_df["TOTAL_DOM_BITSCORE"]=total_dom_bitscore
+		hit_df["TOTAL_IDENTICAL_COUNT"]=total_num_ident
+		hit_df["TOTAL_SIMILAR_COUNT"]=total_num_sim
+		hit_df["TOTAL_QUERY_ALN_LEN"]=total_query_aln
+		hit_df["TOTAL_HMM_ALN_LEN"]=total_hmm_aln
 	
-		hit_dict=defaultdict(dict)
-		
-		for query_id in fixed_hsp_dict:
-		
-			for target_id in fixed_hsp_dict[query_id]:
-
-				hsp_dict=defaultdict(dict)
-				
-				hsp_list=fixed_hsp_dict[query_id][target_id]
-				
-				total_pident=hsp_list[0]['PERCENT_IDENTITY']
-				total_psim=hsp_list[0]['PERCENT_SIMILARITY']
-				total_bitscore=hsp_list[0]['BITSCORE']
-				total_qcov=hsp_list[0]['QUERY_COVERAGE']
-				total_hcov=hsp_list[0]['HMM_COVERAGE']
-				total_num_ident=hsp_list[0]['IDENTICAL_COUNT']
-				total_num_sim=hsp_list[0]['SIMILAR_COUNT']
-				query_len=hsp_list[0]['QUERY_LEN']
-				hmm_len=hsp_list[0]['HMM_LEN']
-				num_hsp=len(hsp_list)
-				
-				if num_hsp>1:
-					total_num_ident=sum(int(k['IDENTICAL_COUNT']) for k in hsp_list)
-					total_num_sim=sum(int(k['SIMILAR_COUNT']) for k in hsp_list)
-					sum_query_aln=sum(int((k['QUERY_END']-k['QUERY_START'])+1) for k in hsp_list)
-					sum_hmm_aln=sum(int((k['HMM_END']-k['HMM_START'])+1) for k in hsp_list)					
-					total_bitscore=sum(float(k['BITSCORE']) for k in hsp_list)
-					total_pident=round(float(int(total_num_ident)/int(min(sum_query_aln,sum_hmm_aln)))*100,2)
-					total_psim=round(float(int(total_num_sim)/int(min(sum_query_aln,sum_hmm_aln)))*100,2)
-					total_qcov=round(float(int(sum_query_aln) / int(query_len))*100,2)
-					total_hcov=round(float(int(sum_hmm_aln) / int(hmm_len))*100,2)
-				
-				for hsp in hsp_list:
-					hsp_dict[hsp['DOMAIN_INDEX']]=hsp
-					hsp_dict[hsp['DOMAIN_INDEX']].update({'TOTAL_IDENTICAL_COUNT':total_num_ident,
-									 'TOTAL_SIMILAR_COUNT':total_num_sim,
-									 'TOTAL_BITSCORE':total_bitscore,
-									 'TOTAL_PERCENT_IDENTITY':total_pident,
-									 'TOTAL_PERCENT_SIMILARITY':total_psim,
-									 'TOTAL_QUERY_COVERAGE':total_qcov,
-									 'TOTAL_HMM_COVERAGE':total_hcov})
-				
-				hit_dict[query_id][target_id]=hsp_dict
-				
-		return(hit_dict)							 					
+		return(hit_df)							 					
 		
 		
