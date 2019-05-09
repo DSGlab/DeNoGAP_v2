@@ -36,7 +36,7 @@ Welcome to the DeNoGAP_v2 Tutorial
 `conda install --name denogap2 python=3.7`<br>
 `conda install --name denogap2 biopython hmmer blast mcl scipy sqlite mafft psutil pandas`<br>
 
-**2. How to run DeNoGAP pipeline**
+## **2. How to run DeNoGAP pipeline**
 
 - Activate DeNoGAP2 Conda environment:
 
