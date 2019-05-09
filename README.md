@@ -2,7 +2,7 @@ Welcome to the DeNoGAP_v2 Tutorial
 
 ## **1. INSTALLATION**
 
-##**Perquisites required**
+**Perquisites required**
 
 - Installation of DeNoGAP2 pipeline and programs used within it requires Miniconda3 & Python3.7 or above to be installed on the system.
 
@@ -19,7 +19,7 @@ Welcome to the DeNoGAP_v2 Tutorial
 `wget https://repo.continuum.io/miniconda/Miniconda3-latest-<OS>.sh`<br>
 `sh Miniconda3-latest-<OS>.sh`
 
-##**Instructions to setup & install DeNoGAP2**
+**Instructions to setup & install DeNoGAP2**
 
 - Create a conda environment for DeNOGAP2
 
@@ -31,12 +31,12 @@ Welcome to the DeNoGAP_v2 Tutorial
 `conda config --add channels conda-forge`<br>
 `conda config --add channels bioconda`<br>
 
-##**Install required programs and supporting packages in DeNoGAP2 conda environment**
+**Install required programs and supporting packages in DeNoGAP2 conda environment**
 
 `conda install --name denogap2 python=3.7`<br>
 `conda install --name denogap2 biopython hmmer blast mcl scipy sqlite mafft psutil pandas`<br>
 
-##**2. How to run DeNoGAP pipeline**
+**2. How to run DeNoGAP pipeline**
 
 - Activate DeNoGAP2 Conda environment:
 
