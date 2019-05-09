@@ -14,7 +14,7 @@ class FixMultiHSP:
 	def __init__(self,program):
 		self.program=program
 		
-	def fix_hsps(self,result_df,accuracy):
+	def fix_hsps(self,result_df):
 		"""
 		This function iterates over hmmer result dict and prepares list
 		of hsps for each query-target pair to be given to module for computing
@@ -27,38 +27,35 @@ class FixMultiHSP:
 		
 		grouped_hsps=result_df.groupby(['QUERY_ID','HMM_ID'])
 		
-		multi_hsp_df=grouped_hsps.filter(lambda x: len(x) > 1 and any(x["AVERAGE_ACCURACY"]>=accuracy))
-		single_hsp_df=grouped_hsps.filter(lambda x: len(x)==1 and any(x["AVERAGE_ACCURACY"]>=accuracy))
+		multi_hsp_df=grouped_hsps.filter(lambda x: len(x) > 1)
+		single_hsp_df=grouped_hsps.filter(lambda x: len(x)==1)
 		
+		#### add columns to single hsp_df ####
 		
-		#single_hsp_fixed=single_hsp_df.apply(lambda x: self.convert_hsp2hit(x.to_frame().reset_index()))
+		single_hsp_df.loc[:,"TOTAL_PERCENT_IDENTITY"]=single_hsp_df["PERCENT_IDENTITY"]
+		single_hsp_df.loc[:,"TOTAL_PERCENT_SIMILARITY"]=single_hsp_df["PERCENT_SIMILARITY"]
+		single_hsp_df.loc[:,"TOTAL_QUERY_COVERAGE"]=single_hsp_df["QUERY_COVERAGE"]
+		single_hsp_df.loc[:,"TOTAL_HMM_COVERAGE"]=single_hsp_df["QUERY_COVERAGE"]
+		single_hsp_df.loc[:,"TOTAL_DOM_BITSCORE"]=single_hsp_df["DOM_BITSCORE"]
+		single_hsp_df.loc[:,"TOTAL_IDENTICAL_COUNT"]=single_hsp_df["IDENTICAL_COUNT"]
+		single_hsp_df.loc[:,"TOTAL_SIMILAR_COUNT"]=single_hsp_df["SIMILAR_COUNT"]
+		single_hsp_df.loc[:,"TOTAL_QUERY_ALN_LEN"]=(single_hsp_df["QUERY_END"]-single_hsp_df["QUERY_START"])+1
+		single_hsp_df.loc[:,"TOTAL_HMM_ALN_LEN"]=(single_hsp_df["HMM_END"]-single_hsp_df["HMM_START"])+1
 		
+		fixed_hit_df=fixed_hit_df.append(single_hsp_df,ignore_index=True)
 		
 		multi_hsp_group=multi_hsp_df.groupby(['QUERY_ID','HMM_ID'])
 		
-		
-		#print(single_hsp_fixed)
-		
-		
-		
 		for name,hsp_group in multi_hsp_group:
 			
-			hsps=hsp_group[hsp_group.AVERAGE_ACCURACY>=accuracy].to_dict('records')
-			
-			compatible_df=pd.DataFrame()
-			
-			if len(hsps)>1:
-				compatible_hsps=self.compute_best_hsp(hsps,hsp_list=list())
-				compatible_df=pd.DataFrame(compatible_hsps)
-			elif len(hsps)==1:
-				compatible_df=pd.DataFrame(hsps)
-			else:
-				continue	
+			hsps=hsp_group.to_dict('records')
+		
+			compatible_hsps=self.compute_best_hsp(hsps,hsp_list=list())
+			compatible_df=pd.DataFrame(compatible_hsps)
 				
 			hit_df=self.convert_hsp2hit(compatible_df)	
-			print(hit_df)
 				
-			fixed_hit_df.append(hit_df,ignore_index=True)	
+			fixed_hit_df=fixed_hit_df.append(hit_df,ignore_index=True)	
 		
 		return(fixed_hit_df)		
 		
@@ -139,8 +136,8 @@ class FixMultiHSP:
 		total_dom_bitscore=compatible_df["DOM_BITSCORE"].sum()
 		total_num_ident=compatible_df["IDENTICAL_COUNT"].sum()
 		total_num_sim=compatible_df["SIMILAR_COUNT"].sum()
-		total_query_aln=(compatible_df["QUERY_END"] - compatible_df["QUERY_START"]).sum()
-		total_hmm_aln=(compatible_df["HMM_END"] - compatible_df["HMM_START"]).sum()
+		total_query_aln=((compatible_df["QUERY_END"] - compatible_df["QUERY_START"])+1).sum()
+		total_hmm_aln=((compatible_df["HMM_END"] - compatible_df["HMM_START"])+1).sum()
 		
 		hit_df["TOTAL_PERCENT_IDENTITY"]=round(float(int(total_num_ident)/int(min(total_query_aln,total_hmm_aln)))*100,2)
 			
