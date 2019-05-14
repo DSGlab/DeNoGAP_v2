@@ -88,7 +88,7 @@ class SequenceFileUtilities:
 		stdout,stderr=proc.communicate()
 		
 		if proc.returncode!=0:
-			print "Mafft execution failed, Exiting with an error {}".format(stderr)
+			print("Mafft execution failed, Exiting with an error {}".format(stderr))
 			sys.exit()
 		
 		return(msa_file)                                             
