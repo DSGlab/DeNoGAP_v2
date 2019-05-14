@@ -32,7 +32,7 @@ class SequenceClustering:
 		stdout,stderr=proc_mcxload.communicate()
     	
 		if proc_mcxload.returncode!=0:
-			print stderr
+			print(stderr)
     		
 		mcl_cmd="mcl {} -I {} -use-tab {} "\
 				"-o {}".format(mcxload_mci,mcl_inflation,mcxload_tab,mcl_out)
@@ -43,7 +43,7 @@ class SequenceClustering:
 		stdout,stderr=proc_mcl.communicate()
     	
 		if proc_mcl.returncode!=0:
-			print stderr
+			print(stderr)
 		
 		return(mcl_out)
 
@@ -84,8 +84,8 @@ class SequenceClustering:
 					if re.search(group_regx,cluster_line):
 						group_ids=re.findall(group_regx,cluster_line)
 						if len(group_ids)>1:
-							print "Error: multiple hmm-ids clustered togather into"\
-							      "same cluster"
+							print ("Error: multiple hmm-ids clustered togather into"\
+							      "same cluster")
 							sys.exit()
 						else:
 							cluster_id=group_ids[0]
