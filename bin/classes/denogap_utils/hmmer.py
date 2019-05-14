@@ -139,10 +139,10 @@ class Hmmer:
 						first_regx=r"^(\s+)"+ re.escape(target_id)
 						second_regx=r"^(\s+)"+ re.escape(query_id)
         			
-        			if flag_block==1 and\
+				if flag_block==1 and\
         		   		re.match(first_regx,line):
         		   		flag_sim=1
-        			elif flag_sim==1:
+				elif flag_sim==1:
         				if not domain_index in dom_sim_line:
         					sim_line=line.replace(" ","").rstrip("\n")
         					identical_count=len(sim_line)-sim_line.count("+")
@@ -302,7 +302,7 @@ class Hmmer:
 		stdout,stderr=proc.communicate()
 		
 		if proc.returncode!=0:
-			print "HmmBuild execution failed, Exiting with an error {}".format(stderr)
+			print("HmmBuild execution failed, Exiting with an error {}".format(stderr))
 			sys.exit()
 		
 		return(hmm_file) 
